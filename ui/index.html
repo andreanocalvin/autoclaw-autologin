@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoClaw Proxy</title>
+<style>
+:root {
+  --bg: #f0f2f5;
+  --card: #ffffff;
+  --border: #e4e7ec;
+  --text: #101828;
+  --muted: #667085;
+  --muted2: #98a2b3;
+  --accent: #1570ef;
+  --green: #12b76a;
+  --red: #f04438;
+  --yellow: #f79009;
+  --blue: #2e90fa;
+  --gray-bg: #f9fafb;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 24px;
+}
+.container { max-width: 1200px; margin: 0 auto; }
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.header-left h1 {
+  font-size: 22px; font-weight: 700; color: var(--text);
+  display: flex; align-items: center; gap: 8px;
+}
+.header-left .subtitle {
+  color: var(--muted); font-size: 13px; margin-top: 4px;
+}
+.header-right {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+
+/* Status dot */
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+}
+.dot-green { background: var(--green); box-shadow: 0 0 0 3px rgba(18,183,106,0.15); }
+.dot-red { background: var(--red); box-shadow: 0 0 0 3px rgba(240,68,56,0.15); }
+.dot-yellow { background: var(--yellow); box-shadow: 0 0 0 3px rgba(247,144,9,0.15); }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; border: 1px solid var(--border);
+  cursor: pointer; transition: all 0.15s;
+  background: var(--card); color: var(--text);
+}
+.btn:hover { background: var(--gray-bg); }
+.btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
+.btn-primary:hover { background: #126cd6; }
+.btn-warning { background: rgba(247,144,9,0.08); color: var(--yellow); border-color: rgba(247,144,9,0.3); }
+.btn-warning:hover { background: rgba(247,144,9,0.15); }
+.btn-danger { background: rgba(240,68,56,0.08); color: var(--red); border-color: rgba(240,68,56,0.3); }
+.btn-danger:hover { background: rgba(240,68,56,0.15); }
+.btn-sm { padding: 4px 8px; font-size: 12px; }
+.btn-icon {
+  width: 28px; height: 28px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; cursor: pointer; color: var(--muted);
+  transition: all 0.15s;
+}
+.btn-icon:hover { background: var(--gray-bg); color: var(--text); }
+.btn-icon.danger:hover { background: rgba(240,68,56,0.08); color: var(--red); border-color: rgba(240,68,56,0.3); }
+.btn-icon svg { width: 14px; height: 14px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Credits bar */
+.credits-bar {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 6px 14px; border-radius: 8px;
+  background: var(--card); border: 1px solid var(--border);
+  font-size: 13px; font-weight: 600;
+}
+.credits-bar .credits-label { color: var(--muted2); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.credits-bar .credits-value { color: var(--text); }
+.credits-bar .credits-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+/* Card grid */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.account-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  transition: box-shadow 0.15s;
+}
+.account-card:hover { box-shadow: 0 2px 8px rgba(16,24,40,0.06); }
+
+.card-row1 {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.card-name {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 600; color: var(--text);
+}
+.card-actions { display: flex; gap: 4px; }
+
+.card-row2 {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 14px;
+}
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 600;
+}
+.badge-active { background: rgba(18,183,106,0.1); color: var(--green); }
+.badge-disabled { background: rgba(240,68,56,0.08); color: var(--red); }
+.badge-expiring { background: rgba(247,144,9,0.1); color: var(--yellow); }
+.req-count { font-size: 12px; color: var(--muted2); }
+
+.pill {
+  display: inline-flex; align-items: center;
+  padding: 2px 10px; border-radius: 12px;
+  font-size: 11px; font-weight: 500; color: var(--muted);
+  background: var(--gray-bg);
+}
+
+.card-row3 {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.card-row3 .label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.card-row3 .value { font-size: 12px; color: var(--text); font-weight: 600; }
+
+/* Quota bar */
+.quota-bar {
+  height: 8px; border-radius: 4px;
+  background: var(--gray-bg); overflow: hidden;
+}
+.quota-fill {
+  height: 100%; border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.fill-blue { background: var(--blue); }
+.fill-green { background: var(--green); }
+.fill-yellow { background: var(--yellow); }
+.fill-red { background: var(--red); }
+
+/* Empty state */
+.empty-state {
+  text-align: center; padding: 48px;
+  color: var(--muted); font-size: 14px;
+}
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  padding: 12px 20px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; z-index: 2000;
+  background: var(--text); color: white;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  animation: slideIn 0.2s ease;
+}
+.toast-success { background: var(--green); }
+.toast-error { background: var(--red); }
+@keyframes slideIn {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Spin */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinning svg { animation: spin 0.8s linear infinite; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .cards-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>AutoClaw Proxy</h1>
+      <div class="subtitle">AutoClaw accounts — access GLM-5.2, GLM-5 Turbo, DeepSeek-V4-Pro</div>
+    </div>
+    <div class="header-right">
+      <div class="credits-bar" id="credits-bar" style="display:none;">
+        <span class="credits-dot"></span>
+        <span class="credits-label">All Credits</span>
+        <span class="credits-value"><span id="total-points">0</span> / <span id="total-max">0</span></span>
+      </div>
+      <button class="btn" onclick="refreshAllTokens()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+        Refresh All
+      </button>
+      <button class="btn btn-warning" onclick="deleteExhausted()">Disable Exhausted</button>
+      <button class="btn btn-danger" onclick="deleteInactive()">Delete Inactive</button>
+    </div>
+  </div>
+
+  <div style="margin-bottom:16px; font-size:13px; color:var(--muted);">
+    Connected Accounts <span id="account-count" style="font-weight:600; color:var(--text);">0</span>
+  </div>
+
+  <!-- Cards Grid -->
+  <div id="cards-grid" class="cards-grid">
+    <div class="empty-state">Loading accounts...</div>
+  </div>
+
+  <!-- Pagination -->
+  <div id="pagination" style="display:none; margin-top:24px; display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap;">
+    <button class="btn btn-sm" id="prev-btn" onclick="changePage(-1)">Prev</button>
+    <span id="page-info" style="font-size:13px; color:var(--muted); padding:0 12px;">Page 1 / 1</span>
+    <button class="btn btn-sm" id="next-btn" onclick="changePage(1)">Next</button>
+    <select class="btn btn-sm" id="per-page" onchange="changePerPage()" style="margin-left:12px; padding:4px 8px;">
+      <option value="12">12 / page</option>
+      <option value="24" selected>24 / page</option>
+      <option value="48">48 / page</option>
+      <option value="9999">All</option>
+    </select>
+  </div>
+
+</div>
+
+<script>
+const API = '';
+let walletCache = {};
+let accountsData = [];
+let currentPage = 1;
+let perPage = 24;
+
+// ── Icons (SVG) ──
+const ICONS = {
+  refresh: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>',
+  wallet: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>',
+  trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+  ban: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 14.14 14.14"/></svg>',
+  check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+};
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+  loadAccounts();
+  setInterval(loadAccounts, 60000);
+});
+
+// ── Load accounts + wallet ──
+async function loadAccounts() {
+  try {
+    // 1. Fetch accounts-detail first (fast — no API calls)
+    const detailResp = await fetch(API + '/api/accounts-detail').then(r => r.json());
+    accountsData = detailResp.accounts || [];
+
+    const grid = document.getElementById('cards-grid');
+    document.getElementById('account-count').textContent = accountsData.length;
+
+    if (accountsData.length === 0) {
+      grid.innerHTML = '<div class="empty-state">No accounts. Use autoclaw_autologin.py to add accounts.</div>';
+      document.getElementById('credits-bar').style.display = 'none';
+      document.getElementById('pagination').style.display = 'none';
+      return;
+    }
+
+    // 2. Render current page
+    renderPage();
+
+    // 3. Update totals after all wallets loaded (poll)
+    updateTotalsAsync();
+
+  } catch (e) {
+    document.getElementById('cards-grid').innerHTML =
+      `<div class="empty-state" style="color:var(--red);">Failed to load: ${e.message}</div>`;
+  }
+}
+
+// ── Render single page of cards ──
+function renderPage() {
+  const grid = document.getElementById('cards-grid');
+  const total = accountsData.length;
+  const totalPages = Math.ceil(total / perPage);
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+
+  const start = (currentPage - 1) * perPage;
+  const end = Math.min(start + perPage, total);
+  const pageAccounts = accountsData.slice(start, end);
+
+  // Render cards for this page
+  grid.innerHTML = '';
+  for (let i = 0; i < pageAccounts.length; i++) {
+    const acc = pageAccounts[i];
+    const cardId = 'card-' + acc.email.replace(/[^a-zA-Z0-9]/g, '');
+    const emailShort = acc.email.length > 32 ? acc.email.substring(0, 29) + '...' : acc.email;
+
+    // Token status
+    let tokenBadge, tokenDot, tokenBadgeClass;
+    if (acc.expired) {
+      tokenBadge = 'disabled'; tokenDot = 'dot-red'; tokenBadgeClass = 'badge-disabled';
+    } else if (acc.remaining_hours < 2) {
+      tokenBadge = 'expiring'; tokenDot = 'dot-yellow'; tokenBadgeClass = 'badge-expiring';
+    } else {
+      tokenBadge = 'active'; tokenDot = 'dot-green'; tokenBadgeClass = 'badge-active';
+    }
+
+    const reqCount = (acc.request_count || 0) + ' req';
+
+    // Check if wallet already cached
+    const w = walletCache[acc.email];
+    const balance = w ? w.balance : null;
+    const isExhausted = balance !== null && balance <= 0;
+    const maxPoints = 2300;
+    const pct = balance != null ? Math.min(100, (balance / maxPoints) * 100) : 0;
+
+    let walletBadgeClass = isExhausted ? 'badge-disabled' : 'badge-active';
+    let fillClass = 'fill-blue';
+    if (balance != null) {
+      if (balance <= 0) fillClass = 'fill-red';
+      else if (balance < 500) fillClass = 'fill-yellow';
+      else fillClass = 'fill-blue';
+    }
+
+    const walletText = balance != null ? `${balance.toLocaleString()} / ${maxPoints.toLocaleString()}` : 'Loading...';
+    const cardOpacity = isExhausted ? '0.5' : '1';
+
+    // Card
+    const card = document.createElement('div');
+    card.className = 'account-card';
+    card.id = cardId;
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(8px)';
+    card.style.transition = 'opacity 0.3s, transform 0.3s';
+    card.innerHTML = `
+      <div class="card-row1">
+        <div class="card-name">
+          <span class="status-dot ${tokenDot}"></span>
+          <span>${emailShort}</span>
+        </div>
+        <div class="card-actions">
+          <button class="btn-icon" onclick="refreshToken('${acc.email}', this)" title="Refresh token">${ICONS.refresh}</button>
+          <button class="btn-icon" onclick="checkWalletSingle('${acc.email}', this)" title="Check wallet">${ICONS.wallet}</button>
+          <button class="btn-icon danger" onclick="deleteAccount('${acc.email}', this)" title="Delete">${ICONS.trash}</button>
+        </div>
+      </div>
+      <div class="card-row2">
+        <span class="badge ${tokenBadgeClass}">${tokenBadge}</span>
+        <span class="req-count">${reqCount}</span>
+        <span class="pill">Reward Points</span>
+      </div>
+      <div class="card-row3">
+        <span class="label">Points</span>
+        <span class="value"><span class="badge ${walletBadgeClass}" id="wallet-${cardId}">${walletText}</span></span>
+      </div>
+      <div class="quota-bar">
+        <div class="quota-fill ${fillClass}" id="bar-${cardId}" style="width: ${pct}%"></div>
+      </div>
+    `;
+    grid.appendChild(card);
+
+    // Animate in
+    requestAnimationFrame(() => {
+      card.style.opacity = cardOpacity;
+      card.style.transform = 'translateY(0)';
+    });
+
+    // Fetch wallet if not cached
+    if (balance === null) {
+      fetchWalletForCard(acc.email, cardId);
+    }
+  }
+
+  // Update pagination controls
+  const pagDiv = document.getElementById('pagination');
+  if (total > perPage) {
+    pagDiv.style.display = 'flex';
+    document.getElementById('page-info').textContent = `Page ${currentPage} / ${totalPages} (${total} accounts)`;
+    document.getElementById('prev-btn').disabled = currentPage <= 1;
+    document.getElementById('next-btn').disabled = currentPage >= totalPages;
+  } else {
+    pagDiv.style.display = 'none';
+  }
+}
+
+// ── Pagination controls ──
+function changePage(dir) {
+  const totalPages = Math.ceil(accountsData.length / perPage);
+  currentPage = Math.max(1, Math.min(totalPages, currentPage + dir));
+  renderPage();
+}
+
+function changePerPage() {
+  perPage = parseInt(document.getElementById('per-page').value);
+  currentPage = 1;
+  renderPage();
+}
+
+// ── Fetch wallet for single card (async, non-blocking) ──
+async function fetchWalletForCard(email, cardId) {
+  const walletEl = document.getElementById('wallet-' + cardId);
+  const barEl = document.getElementById('bar-' + cardId);
+  if (!walletEl) return;
+
+  try {
+    const resp = await fetch(API + '/api/wallet/' + encodeURIComponent(email), { timeout: 10000 });
+    const data = await resp.json();
+    if (data.code === 0 && data.data) {
+      const balance = data.data.total_balance;
+      const maxPoints = 2300;
+      const pct = Math.min(100, (balance / maxPoints) * 100);
+      const isExhausted = balance <= 0;
+
+      // Update cache
+      walletCache[email] = { email, balance, status: isExhausted ? 'exhausted' : 'active' };
+
+      // Update card UI
+      let walletBadgeClass = isExhausted ? 'badge-disabled' : 'badge-active';
+      let fillClass = 'fill-blue';
+      if (isExhausted) fillClass = 'fill-red';
+      else if (balance < 500) fillClass = 'fill-yellow';
+
+      walletEl.className = 'badge ' + walletBadgeClass;
+      walletEl.textContent = `${balance.toLocaleString()} / ${maxPoints.toLocaleString()}`;
+
+      if (barEl) {
+        barEl.className = 'quota-fill ' + fillClass;
+        barEl.style.width = pct + '%';
+      }
+
+      // If exhausted, mark card visually
+      if (isExhausted) {
+        const card = document.getElementById(cardId);
+        if (card) card.style.opacity = '0.5';
+      }
+    } else {
+      walletEl.textContent = 'Error';
+      walletEl.className = 'badge badge-disabled';
+    }
+  } catch (e) {
+    walletEl.textContent = '—';
+    walletEl.className = 'badge badge-disabled';
+  }
+}
+
+// ── Update totals bar async (poll walletCache) ──
+async function updateTotalsAsync() {
+  let totalPoints = 0, totalMax = 0;
+  let loaded = 0;
+  const target = accountsData.length;
+
+  for (let i = 0; i < 30; i++) {
+    totalPoints = 0; totalMax = 0; loaded = 0;
+    for (const acc of accountsData) {
+      const w = walletCache[acc.email];
+      if (w && w.balance != null) {
+        totalPoints += w.balance;
+        totalMax += 2300;
+        loaded++;
+      }
+    }
+    if (loaded >= target) break;
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  if (totalMax > 0) {
+    document.getElementById('credits-bar').style.display = 'inline-flex';
+    document.getElementById('total-points').textContent = totalPoints.toLocaleString();
+    document.getElementById('total-max').textContent = totalMax.toLocaleString();
+  } else {
+    document.getElementById('credits-bar').style.display = 'none';
+  }
+}
+
+// ── Refresh single token ──
+async function refreshToken(email, btn) {
+  if (btn) { btn.classList.add('spinning'); btn.disabled = true; }
+  try {
+    const resp = await fetch(API + '/api/refresh/' + encodeURIComponent(email), { method: 'POST' });
+    const data = await resp.json();
+    if (data.success) {
+      showToast(`Refreshed: ${email}`, 'success');
+      loadAccounts();
+    } else {
+      showToast(`Refresh failed: ${email}`, 'error');
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+  if (btn) { btn.classList.remove('spinning'); btn.disabled = false; }
+}
+
+// ── Refresh all tokens ──
+async function refreshAllTokens() {
+  showToast('Refreshing all tokens...', 'success');
+  try {
+    const resp = await fetch(API + '/refresh-all', { method: 'POST' });
+    const data = await resp.json();
+    showToast(`Refreshed: ${data.success} ok, ${data.fail} failed`, data.fail > 0 ? 'error' : 'success');
+    loadAccounts();
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ── Check wallet single ──
+async function checkWalletSingle(email, btn) {
+  if (btn) { btn.classList.add('spinning'); btn.disabled = true; }
+  try {
+    const resp = await fetch(API + '/api/wallet/' + encodeURIComponent(email));
+    const data = await resp.json();
+    if (data.code === 0 && data.data) {
+      showToast(`${email}: ${data.data.total_balance} pts`, 'success');
+      walletCache[email] = { email, balance: data.data.total_balance, status: data.data.total_balance > 0 ? 'active' : 'exhausted' };
+      loadAccounts();
+    } else {
+      showToast(`Wallet check failed: ${email}`, 'error');
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+  if (btn) { btn.classList.remove('spinning'); btn.disabled = false; }
+}
+
+// ── Delete account ──
+async function deleteAccount(email, btn) {
+  if (!confirm(`Delete ${email}?`)) return;
+  if (btn) { btn.disabled = true; }
+  try {
+    const resp = await fetch(API + '/api/delete/' + encodeURIComponent(email), { method: 'DELETE' });
+    const data = await resp.json();
+    if (data.success) {
+      showToast(`Deleted: ${email}`, 'success');
+      loadAccounts();
+    } else {
+      showToast('Delete failed', 'error');
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ── Delete exhausted (balance=0) ──
+async function deleteExhausted() {
+  const exhausted = accountsData.filter(acc => {
+    const w = walletCache[acc.email];
+    return w && w.balance !== null && w.balance <= 0;
+  });
+  if (exhausted.length === 0) { showToast('No exhausted accounts', 'success'); return; }
+  if (!confirm(`Delete ${exhausted.length} exhausted accounts?`)) return;
+  for (const acc of exhausted) {
+    try {
+      await fetch(API + '/api/delete/' + encodeURIComponent(acc.email), { method: 'DELETE' });
+    } catch {}
+  }
+  showToast(`Deleted ${exhausted.length} exhausted accounts`, 'success');
+  loadAccounts();
+}
+
+// ── Delete inactive (expired tokens) ──
+async function deleteInactive() {
+  const inactive = accountsData.filter(acc => acc.expired);
+  if (inactive.length === 0) { showToast('No inactive accounts', 'success'); return; }
+  if (!confirm(`Delete ${inactive.length} inactive (expired) accounts?`)) return;
+  for (const acc of inactive) {
+    try {
+      await fetch(API + '/api/delete/' + encodeURIComponent(acc.email), { method: 'DELETE' });
+    } catch {}
+  }
+  showToast(`Deleted ${inactive.length} inactive accounts`, 'success');
+  loadAccounts();
+}
+
+// ── Toast ──
+function showToast(msg, type) {
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + (type || 'success');
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+flask>=3.0
+requests>=2.31
+cloakbrowser>=0.4.5
+aiohttp>=3.9

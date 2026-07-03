@@ -1,0 +1,22 @@
+# Sensitive — NEVER commit
+accounts.txt
+accounts-test.txt
+tokens.json
+providers_import.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# CloakBrowser binary cache
+.cloakbrowser/
+
+# OS
+Thumbs.db
+.DS_Store

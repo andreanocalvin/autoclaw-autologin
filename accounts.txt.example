@@ -1,0 +1,9 @@
+# AutoClaw Auto-Login — Account List
+# Format: email:password (one per line)
+# Lines starting with # are comments
+#
+# Example:
+# your_email@gmail.com:your_password
+# another@gmail.com:their_password
+
+your_email@gmail.com:your_password
