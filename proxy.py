@@ -26,7 +26,7 @@ from config import (
 )
 from auth import (
     get_valid_token, refresh_all, list_accounts,
-    check_wallet, check_ledger, load_tokens,
+    check_wallet, check_ledger, load_tokens, save_tokens,
 )
 
 TOKENS_FILE_FULL = TOKENS_FILE  # full path for backup operations
@@ -356,20 +356,26 @@ def accounts_detail():
 @app.route("/api/refresh/<path:email>", methods=["POST"])
 def refresh_single(email):
     """Refresh access token for a single account."""
+    import traceback
     from auth import refresh_token as do_refresh
-    data = load_tokens()
-    acc = None
-    for a in data["accounts"]:
-        if a.get("email") == email:
-            acc = a
-            break
-    if not acc:
-        return jsonify({"error": "Account not found"}), 404
+    try:
+        data = load_tokens()
+        acc = None
+        for a in data["accounts"]:
+            if a.get("email") == email:
+                acc = a
+                break
+        if not acc:
+            return jsonify({"error": "Account not found"}), 404
 
-    new_token = do_refresh(acc)
-    if new_token:
-        return jsonify({"success": True, "email": email, "message": "Token refreshed"})
-    return jsonify({"success": False, "email": email, "error": "Refresh failed"}), 500
+        new_token = do_refresh(acc)
+        if new_token:
+            return jsonify({"success": True, "email": email, "message": "Token refreshed"})
+        return jsonify({"success": False, "email": email, "error": "Refresh failed"}), 500
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[proxy] refresh_single error: {tb}")
+        return jsonify({"success": False, "email": email, "error": str(e), "traceback": tb}), 500
 
 
 @app.route("/api/wallet-bulk", methods=["GET"])
