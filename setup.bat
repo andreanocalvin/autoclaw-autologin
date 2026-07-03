@@ -1,13 +1,51 @@
 @echo off
 setlocal
-title AutoClaw Proxy Setup (CloakBrowser)
+title AutoClaw Auto-Login - Setup
 
 echo.
 echo  ===================================================
-echo     AutoClaw Proxy - First Time Setup (CloakBrowser)
+echo     AutoClaw Auto-Login - First Time Setup
 echo  ===================================================
 echo.
 
+REM ── Check Python installed ──
+echo  Checking Python...
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo  [ERROR] Python is NOT installed!
+    echo.
+    echo  Please install Python 3.10+ from:
+    echo     https://www.python.org/downloads/
+    echo.
+    echo  IMPORTANT: Check "Add Python to PATH" during install.
+    echo.
+    echo  After installing Python, run this setup again.
+    echo.
+    pause
+    exit /b 1
+)
+for /f "tokens=2" %%v in ('python --version 2^>^&1') do set PYVER=%%v
+echo  Python found: %PYVER%
+
+REM ── Check pip ──
+pip --version >nul 2>&1
+if errorlevel 1 (
+    echo  [ERROR] pip not found. Reinstall Python with pip enabled.
+    pause
+    exit /b 1
+)
+
+REM ── Create accounts.txt from template if not exists ──
+if not exist "accounts.txt" (
+    if exist "accounts.txt.example" (
+        copy "accounts.txt.example" "accounts.txt" >nul
+        echo  Created accounts.txt from template.
+        echo  ^>^> Edit accounts.txt and add your email:password lines ^<^<
+    )
+)
+
+echo.
 echo  Installing Python dependencies...
 pip install flask requests cloakbrowser aiohttp 2>nul
 if errorlevel 1 (
