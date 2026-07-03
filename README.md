@@ -1,6 +1,8 @@
 # AutoClaw Auto-Login
 
-OpenAI-compatible reverse proxy + Google OAuth auto-login automation for AutoGLM/Z.ai (AutoClaw backend).
+OpenAI-compatible reverse proxy + Google OAuth auto-login automation for [AutoGLM/Z.ai](https://z.ai) (AutoClaw backend).
+
+AutoClaw gives free access to GLM-5.2, GLM-5 Turbo, and DeepSeek models via Google SSO. This tool automates the login flow and exposes a local OpenAI-compatible API — so any OpenAI client (Cursor, Continue, OpenWebUI, etc.) can use GLM models for free.
 
 Uses [CloakBrowser](https://cloakbrowser.dev) — C++ source-level stealth Chromium (58 patches) instead of raw Playwright. Passes Cloudflare, reCAPTCHA v3, FingerprintJS, BrowserScan without JS injection.
 
@@ -9,15 +11,32 @@ Uses [CloakBrowser](https://cloakbrowser.dev) — C++ source-level stealth Chrom
 - **Auto-Login**: Automated Google OAuth login for AutoClaw accounts (batch mode, concurrent)
 - **OpenAI-compatible Proxy**: Drop-in `/v1/chat/completions` endpoint — works with any OpenAI client
 - **Token Management**: Auto-refresh (24h TTL), round-robin rotation, wallet balance monitoring
-- **Dashboard**: Web UI for monitoring accounts, credits, token expiry
+- **Dashboard**: Web UI at `http://localhost:31000` for monitoring accounts, credits, token expiry
 - **Stealth**: CloakBrowser handles all fingerprinting at C++ binary level — no JS injection needed
 
-## Quick Start
+## Prerequisites
+
+- **Python 3.10+** — [Download here](https://www.python.org/downloads/) (check "Add Python to PATH" during install)
+- **Google accounts** — email:password for each AutoClaw account you want to login
+
+## Quick Start (Windows — One-Click)
+
+```
+1. Double-click setup.bat      → installs deps + CloakBrowser binary (~535MB)
+2. Edit accounts.txt           → add email:password per line
+3. Double-click start-proxy.bat → starts proxy on http://localhost:31000
+4. Double-click run-batch.bat  → auto-login all accounts
+```
+
+Done. Open `http://localhost:31000` in your browser to see the dashboard.
+
+## Quick Start (Manual / Any OS)
 
 ```bash
 # 1. Install dependencies + CloakBrowser binary
 pip install -r requirements.txt
 python -m cloakbrowser install
+python -m playwright install-deps chromium
 
 # 2. Copy account template
 cp accounts.txt.example accounts.txt
@@ -29,23 +48,6 @@ python proxy.py
 # 4. Auto-login accounts (Google OAuth automation)
 python autoclaw_autologin.py --batch accounts.txt --interactive
 ```
-
-Or on Windows: double-click `setup.bat`, then `start-proxy.bat`, then `run-batch.bat`.
-
-## What Changed from Original (Playwright → CloakBrowser)
-
-- `from playwright.async_api import async_playwright` → `from cloakbrowser import launch_async`
-- `p.chromium.launch(headless=..., args=[...stealth flags...])` → `launch_async(headless=...)`
-- Removed 15-line `add_init_script()` JS injection (navigator.webdriver, plugins, chrome, WebGL spoofing) — CloakBrowser handles all stealth at C++ binary level
-- Removed manual `user_agent=` override — CloakBrowser auto-generates real Chrome UA
-- Removed 10+ `--disable-*` args — CloakBrowser has its own default stealth args
-- `humanize=True` enabled — human-like mouse, keyboard, and scroll behavior
-- Login Success detection — page content checked for "Login Success" to instantly grab token and close browser (no 90s timeout wait)
-- Password field error handling — gracefully handles DOM changes during Google's multi-step redirect flow
-- Faster timings: initial sleep 2→1s, callback wait 6→0s, post-password 3→1s, consent 1.5→0.5s, loop 1→0.5s
-- Typical login time: ~37s per account (was ~121s)
-
-All other files (proxy.py, auth.py, config.py, login.py) unchanged — CloakBrowser returns a standard Playwright Browser object.
 
 ## Usage
 
@@ -158,7 +160,7 @@ autoclaw-autologin/
 ├── accounts.txt           # email:password list (gitignored)
 ├── accounts.txt.example   # Template for accounts.txt
 ├── requirements.txt       # Python deps (cloakbrowser, flask, requests, aiohttp)
-├── setup.bat              # First-time setup (installs cloakbrowser + binary)
+├── setup.bat              # One-click setup (checks Python, installs deps + binary)
 ├── start-proxy.bat        # Start proxy server
 ├── run-batch.bat          # Batch login (interactive)
 ├── run-test.bat           # Test single account
@@ -168,12 +170,6 @@ autoclaw-autologin/
 │   └── index.html
 └── README.md
 ```
-
-## Requirements
-
-- Python 3.10+
-- Windows (bat scripts) or any OS with Python
-- CloakBrowser (auto-installed via `setup.bat` or `python -m cloakbrowser install`)
 
 ## License
 
