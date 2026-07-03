@@ -22,12 +22,14 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from config import (
     CHAT_COMPLETIONS, MODEL_MAP, DEFAULT_MODEL,
-    PROXY_HOST, PROXY_PORT,
+    PROXY_HOST, PROXY_PORT, TOKENS_FILE,
 )
 from auth import (
     get_valid_token, refresh_all, list_accounts,
     check_wallet, check_ledger, load_tokens,
 )
+
+TOKENS_FILE_FULL = TOKENS_FILE  # full path for backup operations
 
 app = Flask(__name__)
 
@@ -409,6 +411,12 @@ def delete_account(email):
 
 @app.route("/refresh-all", methods=["POST"])
 def do_refresh_all():
+    # Backup tokens.json before refresh (preventive)
+    import shutil
+    try:
+        shutil.copy2(TOKENS_FILE_FULL, TOKENS_FILE_FULL + ".bak")
+    except Exception as e:
+        print(f"[proxy] Backup before refresh-all failed: {e}")
     success, fail = refresh_all()
     return jsonify({"success": success, "fail": fail})
 

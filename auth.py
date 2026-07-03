@@ -44,10 +44,28 @@ def load_tokens():
 
 
 def save_tokens(data):
-    """Save tokens to JSON file (thread-safe)."""
+    """Save tokens to JSON file (thread-safe, atomic, with wipe guard).
+    Refuses to write if new account count < 50% of existing — prevents
+    accidental wipe from race conditions or corrupted reads."""
     with _lock:
-        with open(TOKENS_FILE, "w") as f:
+        # Guard: refuse to write if we'd be wiping >50% of accounts
+        try:
+            with open(TOKENS_FILE, "r") as f:
+                existing = json.load(f)
+            existing_count = len(existing.get("accounts", []))
+            new_count = len(data.get("accounts", []))
+            if existing_count > 0 and new_count < existing_count * 0.5:
+                print(f"[auth] BLOCKED save_tokens: {new_count} accounts would replace {existing_count} (wipe guard)")
+                return False
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass  # No existing file or corrupt — allow write
+        # Atomic write: write to temp file then rename
+        import os
+        tmp = TOKENS_FILE + ".tmp"
+        with open(tmp, "w") as f:
             json.dump(data, f, indent=2)
+        os.replace(tmp, TOKENS_FILE)
+        return True
 
 
 def add_token(email, access_token, refresh_token, user_id, device_id, source_id="autoclaw"):
@@ -146,15 +164,47 @@ def refresh_token(account):
 
 
 def refresh_all():
-    """Refresh all tokens. Returns count of success/fail."""
+    """Refresh all tokens. Returns count of success/fail.
+    Collects all updates in-memory, saves ONCE at end (not per-account).
+    This prevents race conditions that can wipe tokens.json."""
     data = load_tokens()
     success = 0
     fail = 0
+    now = int(time.time())
     for acc in data["accounts"]:
-        if refresh_token(acc):
-            success += 1
-        else:
+        # Build refresh request from current account data
+        try:
+            headers = _sign_headers()
+            body = {
+                "source_id": acc.get("source_id", "autoclaw"),
+                "device_id": acc["device_id"],
+                "refresh_token": acc["refresh_token"],
+            }
+            resp = requests.post(REFRESH_URL, json=body, headers=headers, timeout=15, verify=False)
+            resp_data = resp.json()
+
+            if resp_data.get("code") == 0 and "data" in resp_data:
+                new_access = resp_data["data"].get("access_token")
+                new_refresh = resp_data["data"].get("refresh_token", acc["refresh_token"])
+                if new_access:
+                    acc["access_token"] = new_access
+                    if new_refresh:
+                        acc["refresh_token"] = new_refresh
+                    acc["last_refreshed"] = now
+                    success += 1
+                    print(f"[auth] Refreshed: {acc['email']}")
+                else:
+                    fail += 1
+                    print(f"[auth] Refresh failed (no access_token): {acc['email']}")
+            else:
+                fail += 1
+                print(f"[auth] Refresh failed: {acc['email']}: {resp_data}")
+        except Exception as e:
             fail += 1
+            print(f"[auth] Refresh error for {acc['email']}: {e}")
+
+    # Save ONCE at the end (not per-account) — atomic, with wipe guard
+    save_tokens(data)
     print(f"[auth] Refresh all: {success} ok, {fail} fail")
     return success, fail
 
