@@ -209,6 +209,7 @@ body {
         <span class="credits-dot"></span>
         <span class="credits-label">All Credits</span>
         <span class="credits-value"><span id="total-points">0</span> / <span id="total-max">0</span></span>
+        <span id="credits-progress" style="font-size:10px; color:var(--muted2); font-weight:500; margin-left:4px;"></span>
       </div>
       <button class="btn" onclick="refreshAllTokens()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
@@ -270,6 +271,7 @@ async function loadAccounts() {
   try {
     // 1. Fetch accounts-detail first (fast — no API calls)
     const detailResp = await fetch(API + '/api/accounts-detail').then(r => r.json());
+    const wasFirstLoad = accountsData.length === 0;
     accountsData = detailResp.accounts || [];
 
     const grid = document.getElementById('cards-grid');
@@ -282,16 +284,81 @@ async function loadAccounts() {
       return;
     }
 
-    // 2. Render current page
+    // 2. Show credits bar immediately (starts at 0 if first load)
+    if (wasFirstLoad) {
+      document.getElementById('credits-bar').style.display = 'inline-flex';
+      document.getElementById('total-points').textContent = '0';
+      document.getElementById('total-max').textContent = '0';
+      // Clear wallet cache on first load
+      walletCache = {};
+    }
+
+    // 3. Render current page
     renderPage();
 
-    // 3. Update totals after all wallets loaded (poll)
-    updateTotalsAsync();
+    // 4. Update totals from existing cache (instant)
+    updateTotals();
+
+    // 5. Fetch ALL wallets in background (limited concurrency) — credits bar counts up live
+    fetchAllWalletsBackground();
 
   } catch (e) {
     document.getElementById('cards-grid').innerHTML =
       `<div class="empty-state" style="color:var(--red);">Failed to load: ${e.message}</div>`;
   }
+}
+
+// ── Fetch all wallets in background with limited concurrency ──
+let _walletFetchInFlight = false;
+let _walletFetchAbort = false;
+
+async function fetchAllWalletsBackground() {
+  // Prevent overlapping fetches
+  if (_walletFetchInFlight) {
+    _walletFetchAbort = true;
+    // Wait a bit for previous to notice abort
+    await new Promise(r => setTimeout(r, 200));
+  }
+  _walletFetchInFlight = true;
+  _walletFetchAbort = false;
+
+  const toFetch = accountsData.filter(acc => {
+    const w = walletCache[acc.email];
+    return !w || w.balance == null;
+  });
+
+  if (toFetch.length === 0) {
+    _walletFetchInFlight = false;
+    return;
+  }
+
+  // Process in small batches to avoid overwhelming the server
+  const BATCH = 5;
+  for (let i = 0; i < toFetch.length; i += BATCH) {
+    if (_walletFetchAbort) break;
+
+    const batch = toFetch.slice(i, i + BATCH);
+    const promises = batch.map(async (acc) => {
+      if (_walletFetchAbort) return;
+      try {
+        const resp = await fetch(API + '/api/wallet/' + encodeURIComponent(acc.email));
+        const data = await resp.json();
+        if (data.code === 0 && data.data) {
+          walletCache[acc.email] = { email: acc.email, balance: data.data.total_balance, status: data.data.total_balance > 0 ? 'active' : 'exhausted' };
+        } else {
+          walletCache[acc.email] = { email: acc.email, balance: 0, status: 'error' };
+        }
+      } catch (e) {
+        walletCache[acc.email] = { email: acc.email, balance: 0, status: 'error' };
+      }
+      // Update totals after each wallet completes — credits bar counts up live
+      updateTotals();
+    });
+
+    await Promise.all(promises);
+  }
+
+  _walletFetchInFlight = false;
 }
 
 // ── Render single page of cards ──
@@ -414,25 +481,23 @@ function changePerPage() {
   renderPage();
 }
 
-// ── Fetch wallet for single card (async, non-blocking) ──
+// ── Fetch wallet for single card (called from renderPage if cache miss) ──
+// Note: background fetchAllWalletsBackground handles the actual API calls.
+// This function just polls cache and updates the card when data arrives.
 async function fetchWalletForCard(email, cardId) {
   const walletEl = document.getElementById('wallet-' + cardId);
   const barEl = document.getElementById('bar-' + cardId);
   if (!walletEl) return;
 
-  try {
-    const resp = await fetch(API + '/api/wallet/' + encodeURIComponent(email), { timeout: 10000 });
-    const data = await resp.json();
-    if (data.code === 0 && data.data) {
-      const balance = data.data.total_balance;
+  // Wait for background fetch to populate cache (poll up to 30s)
+  for (let i = 0; i < 60; i++) {
+    const w = walletCache[email];
+    if (w && w.balance != null) {
+      const balance = w.balance;
       const maxPoints = 2300;
       const pct = Math.min(100, (balance / maxPoints) * 100);
       const isExhausted = balance <= 0;
 
-      // Update cache
-      walletCache[email] = { email, balance, status: isExhausted ? 'exhausted' : 'active' };
-
-      // Update card UI
       let walletBadgeClass = isExhausted ? 'badge-disabled' : 'badge-active';
       let fillClass = 'fill-blue';
       if (isExhausted) fillClass = 'fill-red';
@@ -446,47 +511,80 @@ async function fetchWalletForCard(email, cardId) {
         barEl.style.width = pct + '%';
       }
 
-      // If exhausted, mark card visually
       if (isExhausted) {
         const card = document.getElementById(cardId);
         if (card) card.style.opacity = '0.5';
       }
-    } else {
-      walletEl.textContent = 'Error';
-      walletEl.className = 'badge badge-disabled';
+      return;
     }
-  } catch (e) {
-    walletEl.textContent = '—';
-    walletEl.className = 'badge badge-disabled';
-  }
-}
-
-// ── Update totals bar async (poll walletCache) ──
-async function updateTotalsAsync() {
-  let totalPoints = 0, totalMax = 0;
-  let loaded = 0;
-  const target = accountsData.length;
-
-  for (let i = 0; i < 30; i++) {
-    totalPoints = 0; totalMax = 0; loaded = 0;
-    for (const acc of accountsData) {
-      const w = walletCache[acc.email];
-      if (w && w.balance != null) {
-        totalPoints += w.balance;
-        totalMax += 2300;
-        loaded++;
-      }
-    }
-    if (loaded >= target) break;
     await new Promise(r => setTimeout(r, 500));
   }
 
-  if (totalMax > 0) {
-    document.getElementById('credits-bar').style.display = 'inline-flex';
-    document.getElementById('total-points').textContent = totalPoints.toLocaleString();
-    document.getElementById('total-max').textContent = totalMax.toLocaleString();
+  // Timeout — show dash
+  walletEl.textContent = '—';
+  walletEl.className = 'badge badge-disabled';
+}
+
+// ── Update totals bar (incremental, called per-wallet) ──
+function updateTotals() {
+  let totalPoints = 0, totalMax = 0, loaded = 0;
+  const target = accountsData.length;
+  for (const acc of accountsData) {
+    const w = walletCache[acc.email];
+    if (w && w.balance != null) {
+      totalPoints += w.balance;
+      totalMax += 2300;
+      loaded++;
+    }
+  }
+  const bar = document.getElementById('credits-bar');
+  if (totalMax > 0 || loaded > 0 || target > 0) {
+    bar.style.display = 'inline-flex';
+    // Animate the number — smooth count up
+    const pointsEl = document.getElementById('total-points');
+    const maxEl = document.getElementById('total-max');
+    const progEl = document.getElementById('credits-progress');
+    const current = parseInt(pointsEl.textContent.replace(/[^0-9]/g, '')) || 0;
+    const target_val = totalPoints;
+
+    // Show loading progress
+    if (loaded < target) {
+      progEl.textContent = `(${loaded}/${target})`;
+    } else {
+      progEl.textContent = '';
+    }
+
+    // Smooth count animation — only start if not already animating
+    if (current !== target_val && pointsEl.dataset.animating !== '1') {
+      pointsEl.dataset.animating = '1';
+      requestAnimationFrame(function tick() {
+        const cur = parseInt(pointsEl.textContent.replace(/[^0-9]/g, '')) || 0;
+        const d = target_val - cur;
+        if (d === 0) {
+          pointsEl.textContent = target_val.toLocaleString();
+          pointsEl.dataset.animating = '';
+          return;
+        }
+        // Adaptive step: bigger jumps for large diffs, small for precision
+        const s = Math.max(1, Math.ceil(Math.abs(d) / 15));
+        if (Math.abs(d) <= s) {
+          pointsEl.textContent = target_val.toLocaleString();
+          pointsEl.dataset.animating = '';
+        } else {
+          pointsEl.textContent = (cur + Math.sign(d) * s).toLocaleString();
+          requestAnimationFrame(tick);
+        }
+      });
+    }
+    maxEl.textContent = totalMax.toLocaleString();
+    // Update dot color based on progress
+    const dot = bar.querySelector('.credits-dot');
+    if (dot) {
+      const pct = totalMax > 0 ? (totalPoints / totalMax) * 100 : 0;
+      dot.style.background = pct > 50 ? 'var(--green)' : pct > 20 ? 'var(--yellow)' : 'var(--red)';
+    }
   } else {
-    document.getElementById('credits-bar').style.display = 'none';
+    bar.style.display = 'none';
   }
 }
 
