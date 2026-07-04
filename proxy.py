@@ -191,7 +191,7 @@ def chat_completions():
             json=upstream_body,
             headers=headers,
             stream=True,
-            timeout=120,
+            timeout=600,
             verify=False,
         )
 
@@ -206,13 +206,39 @@ def chat_completions():
             }), upstream_resp.status_code
 
         if client_wants_stream:
-            # Pass through SSE stream — filter non-data lines (e.g. ": OPENROUTER PROCESSING")
+            # Pass through SSE stream — filter reasoning, only forward content chunks
             def generate():
                 for line in upstream_resp.iter_lines():
                     if line:
-                        # Only forward valid SSE data lines
                         if line.startswith(b"data:"):
-                            yield line + b"\n\n"
+                            raw = line[5:].strip()
+                            if raw == b"[DONE]":
+                                yield line + b"\n\n"
+                                continue
+                            try:
+                                chunk = json.loads(raw)
+                                choices = chunk.get("choices", [])
+                                if choices:
+                                    delta = choices[0].get("delta", {})
+                                    # Strip reasoning fields — Cline/OpenAI clients don't understand them
+                                    if "reasoning" in delta:
+                                        del delta["reasoning"]
+                                    if "reasoning_details" in delta:
+                                        del delta["reasoning_details"]
+                                    # Skip chunks with empty content and no tool_calls (pure thinking)
+                                    has_content = bool(delta.get("content"))
+                                    has_tool_calls = bool(delta.get("tool_calls"))
+                                    has_role = bool(delta.get("role"))
+                                    has_finish = bool(choices[0].get("finish_reason"))
+                                    # Only forward if there's actual content/tool_calls/finish — skip empty thinking chunks
+                                    if not has_content and not has_tool_calls and not has_finish:
+                                        continue  # skip empty reasoning chunks
+                                    # Clean native_finish_reason
+                                    if "native_finish_reason" in choices[0]:
+                                        del choices[0]["native_finish_reason"]
+                                yield b"data: " + json.dumps(chunk).encode() + b"\n\n"
+                            except (json.JSONDecodeError, KeyError):
+                                yield line + b"\n\n"
                 yield b"data: [DONE]\n\n"
             return Response(
                 generate(),
@@ -225,6 +251,7 @@ def chat_completions():
         else:
             # Aggregate stream → single JSON response (OpenAI non-stream format)
             full_content = ""
+            full_tool_calls = []  # accumulated tool_calls
             finish_reason = None
             model_name = upstream_model
 
@@ -241,8 +268,24 @@ def chat_completions():
                         choices = chunk.get("choices", [])
                         if choices:
                             delta = choices[0].get("delta", {})
-                            if "content" in delta:
+                            if "content" in delta and delta["content"]:
                                 full_content += delta["content"]
+                            # Handle tool_calls streaming
+                            if "tool_calls" in delta and delta["tool_calls"]:
+                                for tc in delta["tool_calls"]:
+                                    idx = tc.get("index", 0)
+                                    while len(full_tool_calls) <= idx:
+                                        full_tool_calls.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                                    if "id" in tc and tc["id"]:
+                                        full_tool_calls[idx]["id"] = tc["id"]
+                                    if "type" in tc and tc["type"]:
+                                        full_tool_calls[idx]["type"] = tc["type"]
+                                    if "function" in tc:
+                                        fn = tc["function"]
+                                        if "name" in fn and fn["name"]:
+                                            full_tool_calls[idx]["function"]["name"] += fn["name"]
+                                        if "arguments" in fn and fn["arguments"]:
+                                            full_tool_calls[idx]["function"]["arguments"] += fn["arguments"]
                             if choices[0].get("finish_reason"):
                                 finish_reason = choices[0]["finish_reason"]
                         if chunk.get("model"):
@@ -252,6 +295,12 @@ def chat_completions():
                     except json.JSONDecodeError:
                         pass
 
+            message = {"role": "assistant", "content": full_content if full_content else None}
+            if full_tool_calls:
+                message["tool_calls"] = full_tool_calls
+                if not finish_reason:
+                    finish_reason = "tool_calls"
+
             response = {
                 "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
                 "object": "chat.completion",
@@ -259,7 +308,7 @@ def chat_completions():
                 "model": client_model,
                 "choices": [{
                     "index": 0,
-                    "message": {"role": "assistant", "content": full_content},
+                    "message": message,
                     "finish_reason": finish_reason or "stop",
                 }],
                 "usage": usage if 'usage' in dir() else {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
@@ -689,7 +738,7 @@ def api_test_chat():
                 "messages": [{"role": "user", "content": message}],
                 "stream": False,
             },
-            timeout=120,
+            timeout=600,
         )
         if resp.status_code == 200:
             data = resp.json()
