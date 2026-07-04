@@ -3,6 +3,8 @@ accounts.txt
 accounts-test.txt
 tokens.json
 providers_import.json
+.env
+config_local.py
 
 # Python
 __pycache__/
@@ -16,6 +18,11 @@ venv/
 
 # CloakBrowser binary cache
 .cloakbrowser/
+
+# Screenshots / debug
+*.png
+*.jpg
+*.jpeg
 
 # OS
 Thumbs.db
